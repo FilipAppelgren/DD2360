@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Compile the particle simulation and name it a.out
+# Compile the exercise and name it a.out
 
 for n_iterations in 1000000 10000000 100000000 1000000000 10000000000 100000000000;
 do
