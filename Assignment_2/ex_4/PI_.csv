@@ -1,0 +1,18 @@
+iter 100000000 
+PI: 3.141076
+GPU Execution Time 0.0124017
+iter 100000000 
+PI: 3.141413
+GPU Execution Time 0.0108579
+iter 100000000 
+PI: 3.139854
+GPU Execution Time 0.0144599
+iter 100000000 
+PI: 3.139715
+GPU Execution Time 0.0326474
+iter 100000000 
+PI: 3.139879
+GPU Execution Time 0.40904
+iter 100000000 
+PI: 3.129284
+GPU Execution Time 2.02884

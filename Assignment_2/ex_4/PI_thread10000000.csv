@@ -1,0 +1,21 @@
+Total iterations 10000000 grid_size 1536 
+PI: 3.135730
+GPU Execution Time 0.00810485
+Total iterations 10000000 grid_size 768 
+PI: 3.134782
+GPU Execution Time 0.00638487
+Total iterations 10000000 grid_size 384 
+PI: 3.134537
+GPU Execution Time 0.00606253
+Total iterations 10000000 grid_size 192 
+PI: 3.133841
+GPU Execution Time 0.00591171
+Total iterations 10000000 grid_size 96 
+PI: 3.133849
+GPU Execution Time 0.00600783
+Total iterations 10000000 grid_size 48 
+PI: 3.134338
+GPU Execution Time 0.00617444
+Total iterations 10000000 grid_size 24 
+PI: 3.134312
+GPU Execution Time 0.00610136
