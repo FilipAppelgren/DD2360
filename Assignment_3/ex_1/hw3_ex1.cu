@@ -193,7 +193,7 @@ __global__ void gpu_grayscale(int width, int height, float *image, float *image_
 
 
     // No out ouf bounds please!
-    if(row > height || col > width){
+    if(row >= height || col >= width){
         return;
     }
 
@@ -201,8 +201,6 @@ __global__ void gpu_grayscale(int width, int height, float *image, float *image_
     image_out[thread] = pixel[0] * 0.0722f + // B
                         pixel[1] * 0.7152f + // G
                         pixel[2] * 0.2126f;  // R         
-    
-
 }
 
 /**
@@ -287,32 +285,52 @@ __global__ void gpu_gaussian(int width, int height, float *image, float *image_o
                           2.0f / 16.0f, 4.0f / 16.0f, 2.0f / 16.0f,
                           1.0f / 16.0f, 2.0f / 16.0f, 1.0f / 16.0f };
     
-    int index_x = blockIdx.x * blockDim.x + threadIdx.x;
-    int index_y = blockIdx.y * blockDim.y + threadIdx.y;
-    int offset_t = index_y * width + index_x;
-    int offset   = (index_y + 1) * width + (index_x + 1);
-    int block_offset = BLOCK_SIZE_SH * threadIdx.y + threadIdx.x;
-    sh_block[block_offset] = image[offset_t];
-    
-    
-    if((block_offset - (BLOCK_SIZE - 1)) % BLOCK_SIZE_SH == 0){
-        printf("Block offset %d \n", block_offset);
+    int global_x = blockIdx.x * blockDim.x + threadIdx.x;
+    int global_y = blockIdx.y * blockDim.y + threadIdx.y;
+    int local_x = threadIdx.x; 
+    int local_y = threadIdx.y;
+
+    int offset_t = global_y * width + global_x;
+    int offset   = (global_y + 1) * width + (global_x + 1);
+    int block_offset = BLOCK_SIZE_SH * local_y + local_x;
+
+    // Corner case
+    if(local_y == BLOCK_SIZE - 1 && local_x == BLOCK_SIZE - 1){
+        // x-direction
+        sh_block[block_offset + 1] = image[offset_t + 1];
+        sh_block[block_offset + 2] = image[offset_t + 2];
+
+        // y-direction
+        sh_block[block_offset + (1 * BLOCK_SIZE_SH)] = image[offset_t + (1 * width)];
+        sh_block[block_offset + (2 * BLOCK_SIZE_SH)] = image[offset_t + (2 * width)];
+
+        // corner case
+        sh_block[block_offset + (1 * BLOCK_SIZE_SH) + 1] = image[offset_t + (1 * width) + 1];
+        sh_block[block_offset + (1 * BLOCK_SIZE_SH) + 2] = image[offset_t + (1 * width) + 2];
+
+        sh_block[block_offset + (2 * BLOCK_SIZE_SH) + 1] = image[offset_t + (2 * width) + 1];
+        sh_block[block_offset + (2 * BLOCK_SIZE_SH) + 2] = image[offset_t + (2 * width) + 2];
+    }
+    // Side case
+    if(local_x == BLOCK_SIZE - 1 && local_y != BLOCK_SIZE - 1){
         sh_block[block_offset + 1] = image[offset_t + 1];
         sh_block[block_offset + 2] = image[offset_t + 2];
     }
-
-    if(block_offset > (BLOCK_SIZE_SH*(BLOCK_SIZE - 1))){
-        sh_block[block_offset + (BLOCK_SIZE - 1)] = image[offset_t + width];
-        sh_block[block_offset + (2 * (BLOCK_SIZE - 1))] = image[offset_t + 2*width];
-
+    // Bottom case
+    if(local_y == BLOCK_SIZE - 1 && local_x != BLOCK_SIZE - 1){
+        sh_block[block_offset + (1 * BLOCK_SIZE_SH)] = image[offset_t + (1 * width)];
+        sh_block[block_offset + (2 * BLOCK_SIZE_SH)] = image[offset_t + (2 * width)];
     }
-    
 
-    //printf("Gaussian Block offset %d for thread x %d thread y %d with offset_t %d \n", block_offset, threadIdx.x, threadIdx.y, offset_t);
+    sh_block[block_offset] = image[offset_t];
     __syncthreads();
 
-    image_out[offset] = gpu_applyFilter(&sh_block[block_offset],
-                                        BLOCK_SIZE_SH, gaussian, 3);
+    if(global_x < width - 2 && global_y < height - 2){
+        image_out[offset] = gpu_applyFilter(&sh_block[block_offset],
+                                            BLOCK_SIZE_SH, gaussian, 3);
+    }
+
+
 }
 
 /**
@@ -364,21 +382,52 @@ __global__ void gpu_sobel(int width, int height, float *image, float *image_out)
                          0.0f,  0.0f,  0.0f,
                         -1.0f, -2.0f, -1.0f };
 
-    int index_x = blockIdx.x * blockDim.x + threadIdx.x;
-    int index_y = blockIdx.y * blockDim.y + threadIdx.y;
-    int block_offset = BLOCK_SIZE_SH * threadIdx.y + threadIdx.x;
+        int global_x = blockIdx.x * blockDim.x + threadIdx.x;
+        int global_y = blockIdx.y * blockDim.y + threadIdx.y;
+        int local_x = threadIdx.x; 
+        int local_y = threadIdx.y;
+    
+        int offset_t = global_y * width + global_x;
+        int offset   = (global_y + 1) * width + (global_x + 1);
+        int block_offset = BLOCK_SIZE_SH * local_y + local_x;
 
 
-    int offset_t = index_y * width + index_x;
-    int offset   = (index_y + 1) * width + (index_x + 1);
+     // Corner case
+     if(local_y == BLOCK_SIZE - 1 && local_x == BLOCK_SIZE - 1){
+        // x-direction
+        sh_block[block_offset + 1] = image[offset_t + 1];
+        sh_block[block_offset + 2] = image[offset_t + 2];
+
+        // y-direction
+        sh_block[block_offset + (1 * BLOCK_SIZE_SH)] = image[offset_t + (1 * width)];
+        sh_block[block_offset + (2 * BLOCK_SIZE_SH)] = image[offset_t + (2 * width)];
+
+        // corner case
+        sh_block[block_offset + (1 * BLOCK_SIZE_SH) + 1] = image[offset_t + (1 * width) + 1];
+        sh_block[block_offset + (1 * BLOCK_SIZE_SH) + 2] = image[offset_t + (1 * width) + 2];
+
+        sh_block[block_offset + (2 * BLOCK_SIZE_SH) + 1] = image[offset_t + (2 * width) + 1];
+        sh_block[block_offset + (2 * BLOCK_SIZE_SH) + 2] = image[offset_t + (2 * width) + 2];
+    }
+    // Side case
+    if(local_x == BLOCK_SIZE - 1 && local_y != BLOCK_SIZE - 1){
+        sh_block[block_offset + 1] = image[offset_t + 1];
+        sh_block[block_offset + 2] = image[offset_t + 2];
+    }
+    // Bottom case
+    if(local_y == BLOCK_SIZE - 1 && local_x != BLOCK_SIZE - 1){
+        sh_block[block_offset + (1 * BLOCK_SIZE_SH)] = image[offset_t + (1 * width)];
+        sh_block[block_offset + (2 * BLOCK_SIZE_SH)] = image[offset_t + (2 * width)];
+    }
 
     sh_block[block_offset] = image[offset_t];
     __syncthreads();
 
-    float gx = gpu_applyFilter(&sh_block[block_offset], BLOCK_SIZE_SH, sobel_x, 3);
-    float gy = gpu_applyFilter(&sh_block[block_offset], BLOCK_SIZE_SH, sobel_y, 3);
-    image_out[offset] = sqrtf(gx * gx + gy * gy);
-        
+    if(global_x < width - 2 && global_y < height - 2){
+        float gx = gpu_applyFilter(&sh_block[block_offset], BLOCK_SIZE_SH, sobel_x, 3);
+        float gy = gpu_applyFilter(&sh_block[block_offset], BLOCK_SIZE_SH, sobel_y, 3);
+        image_out[offset] = sqrtf(gx * gx + gy * gy);
+    }
 }
 
 int main(int argc, char **argv)
@@ -434,8 +483,7 @@ int main(int argc, char **argv)
 
         // Launch the GPU version
         gettimeofday(&t[0], NULL);
-        //printf("Grid : {%d, %d, %d} blocks. Blocks : {%d, %d, %d} threads.\n",
-        //gridDim.x, gridDim.y, gridDim.z, blockDim.x, blockDim.y, blockDim.z);
+    
         gpu_grayscale<<<grid, block>>>(bitmap.width, bitmap.height,
                                         d_bitmap, d_image_out[0]);
         
