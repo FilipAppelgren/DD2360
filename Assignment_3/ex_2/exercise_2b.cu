@@ -63,9 +63,7 @@ void timestep_update(Particle *particles, int n_particles)
 
     // Update position
     particles[thread].pos = particles[thread].pos + particles[thread].vel;
-    /*printf("Thread %d Coordinate X %f \n", thread, particles[thread].pos.x);
-    printf("Thread %d Coordinate Y %f \n", thread, particles[thread].pos.y);
-    printf("Thread %d Coordinate Z %f \n", thread, particles[thread].pos.z);*/
+
       
 }
 
@@ -85,7 +83,7 @@ float3 random_velocity()
 void timestep_update_cpu(Particle *particles, int n_particles){
 
     for(int i = 0; i < n_particles; i++){
-        //particles[i].vel = add_float3(particles[i].vel, particles[i].vel); 
+        
         particles[i].pos = add_float3(particles[i].pos, particles[i].vel);
     }
 
@@ -95,103 +93,28 @@ int main(int argc, char** argv)
 {   
     int n_particles, n_iterations, n_threads;
 
-    if(argc == 4){
-        n_iterations = std::stoi(argv[1]);
-        n_particles = std::stoi(argv[2]);
-        n_threads = std::stoi(argv[3]);
-    } else {
-        return 0;
-    }
+    n_iterations = 1000;
+    n_particles = 1000000;
+    n_threads = 256;
+
 
     int grid_size = n_particles/n_threads;
     if (n_particles%n_threads != 0){
         grid_size++;
     }
 
-    if(n_threads > 1024)
-        n_threads = 1024;
-
     int bytes = sizeof(Particle) * n_particles;
    
-    // Allocate particle array on host
-    Particle *particles, *gpu_particles, *cpu_particles;
+    Particle *particles;
+    cudaMallocManaged(&particles, bytes);
 
-    cudaMallocHost(&particles, sizeof(Particle) * n_particles);
-    cudaMallocHost(&gpu_particles, sizeof(Particle) * n_particles);
-    cudaMallocHost(&cpu_particles, sizeof(Particle) * n_particles);
-    
-    
-    /*Particle particles[n_particles];
-    Particle gpu_particles[n_particles];
-    Particle cpu_particles[n_particles];*/
-    
-    // Initiate particles
     for(int i = 0; i < n_particles; i++)
     {
         float3 random_vel = random_velocity();
         particles[i] = Particle(random_vel);
     }
-    memcpy(cpu_particles, particles, bytes);
 
-    // Allocate on device
-    
-    int num_streams = 4;
-    Particle *batches[num_streams];
-
-    cudaStream_t streams[num_streams];
-
-    int batch_size = bytes / num_streams;
-    int batch_stride = n_particles / num_streams;
-    for(int j = 0; j < n_iterations; j++){
-
-        for (int i = 0; i < num_streams; i++) {
-
-            cudaStreamCreate(&streams[i]);
-            cudaMalloc(&batches[i], batch_size);
-
-            int batch_number = batch_stride * i;
-
-            cudaMemcpyAsync(batches[i], &gpu_particles[batch_number], batch_size, cudaMemcpyHostToDevice, streams[i]);
-            timestep_update<<<grid_size, n_threads, 0, streams[i]>>>(batches[i], n_particles);
-            cudaMemcpyAsync(&gpu_particles[batch_number], batches[i], batch_size, cudaMemcpyDeviceToHost, streams[i]);
-
-            }
-            //auto gpu_start = std::chrono::steady_clock::now();
-            //auto gpu_end = std::chrono::steady_clock::now();
-            //std::chrono::duration<double> elapsed_gpu_seconds = gpu_end-gpu_start;
-        cudaDeviceSynchronize();
-    }
-
-    // Move particles from host to device
-
-
-    // Update timestep
-
-
-
-    auto cpu_start = std::chrono::steady_clock::now();
     for(int i = 0; i < n_iterations; i++){
-        timestep_update_cpu(cpu_particles, n_particles);
+        timestep_update<<<grid_size, n_threads>>>(particles, n_particles);
     }
-
-    auto cpu_end = std::chrono::steady_clock::now();
-    std::chrono::duration<double> elapsed_cpu_seconds = cpu_end-cpu_start;
-
-
-    // Error calculation, position
-
-    float error = 0;
-    
-    for(int i = 0; i < n_particles; i++){
-        //cpu_particles[i].print_particle();
-        //printf("\n");
-        //gpu_particles[i].print_particle();
-        error += mag_float3(sub_float3(cpu_particles[i].pos, gpu_particles[i].pos));
-    }
-    error = error/n_particles;
-
-    // Threads, iterations, particles, GPU time, CPU time
-    
-    //std::cout << n_threads << "," << n_iterations << "," << n_particles << "," << elapsed_gpu_seconds.count() << "," << elapsed_cpu_seconds.count() << "," << error << std::endl;
-    //printf("%d,%d,%d,%f,%f\n", n_threads, n_iterations, n_particles, elapsed_gpu_seconds, elapsed_cpu_seconds);
 }
