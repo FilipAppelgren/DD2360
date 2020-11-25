@@ -1,14 +1,11 @@
-
-
-
-
 #include <stdlib.h>
 #include <stdio.h>
 #include <cstdlib>
 #include <math.h>
 #include <random>
-#include <chrono>
 #include <iostream>
+#include <curand_kernel.h>
+#include <ctime>
 
 
 class Particle
@@ -71,6 +68,19 @@ void timestep_update(Particle *particles, int n_particles)
     printf("Thread %d Coordinate Y %f \n", thread, particles[thread].pos.y);
     printf("Thread %d Coordinate Z %f \n", thread, particles[thread].pos.z);*/
       
+}
+
+__global__
+void dummy_kernel(float *d_out, int N) {
+
+    int i = blockDim.x * blockIdx.x + threadIdx.x;
+    curandState state;
+    curand_init((unsigned long long)clock() + i, 0, 0, &state);
+    
+    for(int j = 0; j < N; j++){
+        d_out[j] = curand_uniform_double(&state);
+    }
+
 }
 
 float3 random_velocity()
@@ -138,19 +148,25 @@ int main(int argc, char** argv)
     for(int i = 0; i < num_streams; i++){
         cudaStreamCreate(&streams[i]);
         cudaMalloc(&batches[i], batch_size);
-
     }
 
-    for(int j = 0; j < n_iterations; j++){
+    // Dummy variables
+    float *d_out;
+    int N = 1000;
+    cudaMalloc((void**)&d_out, N * sizeof(float));
 
+    for(int j = 0; j < n_iterations; j++){
+        
         for (int i = 0; i < num_streams; i++) {
             int batch_number = batch_stride * i;
 
             cudaMemcpyAsync(batches[i], &gpu_particles[batch_number], batch_size, cudaMemcpyHostToDevice, streams[i]);
             timestep_update<<<grid_size, n_threads, 0, streams[i]>>>(batches[i], n_particles);
+            dummy_kernel<<<grid_size, n_threads, 0, streams[i]>>>(d_out, N);
             cudaMemcpyAsync(&gpu_particles[batch_number], batches[i], batch_size, cudaMemcpyDeviceToHost, streams[i]);
             }
-        
+
+        cudaDeviceSynchronize();
     }
 
     for(int i = 0; i < num_streams; i++){
